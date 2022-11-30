@@ -17,7 +17,10 @@ def get_time(raw_time):
     for time_format in time_formats:
         try:
             t = time.strptime(raw_time, time_format)
-            return t.tm_hour, t.tm_min
+            hours, mins = t.tm_hour, t.tm_min
+            hours = '0' * (hours < 10) + str(hours)
+            mins = '0' * (mins < 10) + str(mins)
+            return hours, mins
         except ValueError:
             pass
     return None, None

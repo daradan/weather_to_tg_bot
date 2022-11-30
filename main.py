@@ -10,7 +10,8 @@ import utils
 from database import SessionLocal
 from utils import UserStates
 from config import TG_TOKEN
-from crud import get_user, create_user
+import crud
+from keyboard_markup import get_markup_welcome, get_markup_notifications
 
 # Configure logging
 logging.basicConfig(
@@ -23,20 +24,12 @@ dp = Dispatcher(bot, storage=RedisStorage2())
 
 
 @dp.message_handler(state='*', commands=['start', 'help'])
-async def send_welcome(message: types.Message):
+async def send_welcome(message: types.Message, state: FSMContext):
     session = SessionLocal()
     await UserStates.WELCOME.set()
-    cur_user = get_user(session, message.from_user.id)
-    if not cur_user:
-        cur_user = create_user(session, message.from_user)
-    markup = types.inline_keyboard.InlineKeyboardMarkup()
-    if not cur_user or not cur_user.location:
-        markup.add(InlineKeyboardButton('Add New Location/City', callback_data='add_location'))
-        markup.add(InlineKeyboardButton('Help', callback_data='help'))
-    else:
-        markup.add(InlineKeyboardButton('Change Location', callback_data='add_location'))
-        markup.add(InlineKeyboardButton('Change Settings', callback_data='change_settings'))
-        markup.add(InlineKeyboardButton('Help', callback_data='help'))
+    cur_user = crud.get_or_create_user(session, user_obj=message.from_user)
+    user_settings = crud.get_settings(session, user_id=cur_user.id)
+    markup = get_markup_welcome(cur_user, user_settings)
     await bot.send_message(message.from_user.id, f'Hello, {message.from_user.first_name}', reply_markup=markup)
     session.close()
 
@@ -52,22 +45,29 @@ async def process_callback_add_location(message: types.Message):
     await bot.send_message(message.from_user.id, 'Please, enter correct location')
 
 
+@dp.callback_query_handler(lambda c: c.data == 'list_notifications', state=UserStates.WELCOME)
+async def process_callback_list_notifications(message: types.Message):
+    session = SessionLocal()
+    notifications = crud.get_settings(session=session, user_id=message.from_user.id)
+    markup = get_markup_notifications(notifications)
+    await bot.send_message(message.from_user.id, 'Your Notifications', reply_markup=markup)
+
+
 @dp.callback_query_handler(lambda c: c.data == 'confirm_location', state=UserStates.SET_LOCATION)
 async def process_callback_confirm_location(message: types.Message):
     await bot.send_message(
         message.from_user.id,
-        f'Location has been saved!\n'
         f'Please, enter notification time (HH MM / HH:MM / HH-MM / HHMM) 24 hour')
     await UserStates.next()
 
 
 @dp.callback_query_handler(lambda c: c.data == 'back_to_menu', state='*')
-async def process_callback_back_to_menu(message: types.Message):
-    await send_welcome(message)
+async def process_callback_back_to_menu(message: types.Message, state: FSMContext):
+    await send_welcome(message, state)
 
 
 @dp.message_handler(state=UserStates.SET_LOCATION)
-async def change_location(message: types.Message):
+async def change_location(message: types.Message, state: FSMContext):
     user_location = message.text
     try:
         geolocation = geo.check_geolocator(user_location)
@@ -82,22 +82,29 @@ async def change_location(message: types.Message):
         InlineKeyboardButton('No', callback_data='resend_location')
     )
     markup.add(InlineKeyboardButton('<< Back to menu', callback_data='back_to_menu'))
+    await state.set_data({'location': geolocation['address']})
     await message.answer(msg, reply_markup=markup)
 
 
 @dp.message_handler(state=UserStates.SET_NOTIFICATION)
-async def change_location(message: types.Message):
+async def set_notification(message: types.Message, state: FSMContext):
+    session = SessionLocal()
     time_from_user = utils.get_time(message.text)
     if time_from_user[0] is None:
         await message.reply('Incorrect time format!', reply=False)
         return
+    user_data = await state.get_data()
+    time = f'{time_from_user[0]}:{time_from_user[1]}'
+    location = user_data['location']
+    crud.create_settings(session, user_id=message.from_user.id, location=location, notify_time=time)
     await message.reply(f'Notification set to {time_from_user[0]}:{time_from_user[1]}', reply=False)
-    await UserStates.WELCOME.set()
+    session.close()
+    await send_welcome(message, state)
 
 
 @dp.message_handler(state='*')
-async def custom_message(message: types.Message):
-    await send_welcome(message)
+async def custom_message(message: types.Message, state: FSMContext):
+    await send_welcome(message, state)
 
 
 # @dp.message_handler(state='*')
