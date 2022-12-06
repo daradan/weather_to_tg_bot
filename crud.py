@@ -31,6 +31,21 @@ def get_settings(session, user_id):
     return settings
 
 
+def get_setting_by_id(session, notification_id):
+    setting = session.query(Settings).filter_by(id=notification_id).first()
+    return setting
+
+
+def get_settings_by_time(session, notification_time):
+    settings = session.query(Settings).filter_by(notify_time=notification_time).all()
+    return settings
+
+
+def delete_setting_by_id(session, notification_id):
+    session.query(Settings).filter_by(id=notification_id).delete()
+    session.commit()
+
+
 def create_settings(session, user_id, location, notify_time):
     settings = Settings(
         user_id=user_id,

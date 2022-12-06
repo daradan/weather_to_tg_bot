@@ -24,4 +24,12 @@ def get_markup_notifications(notification_list: List[Settings]):
         text = f'{notification.location} | {notification.notify_time}'
         btn = InlineKeyboardButton(text=text, callback_data=f'notification_{notification.id}')
         markup.add(btn)
+    markup.add(InlineKeyboardButton(text='<< Back', callback_data='back_to_menu'))
+    return markup
+
+
+def get_markup_notification_settings(notification_id):
+    markup = types.inline_keyboard.InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton('Delete', callback_data=f'delete_notification_{notification_id}'))
+    markup.add(InlineKeyboardButton('<< Back', callback_data='list_notifications'))
     return markup

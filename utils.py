@@ -8,6 +8,8 @@ class UserStates(StatesGroup):
     SET_NOTIFICATION = State()
     CHANGE_LOCATION = State()
     CHANGE_SETTINGS = State()
+    NOTIFICATIONS_LIST = State()
+    SELECT_NOTIFICATION = State()
 
 
 def get_time(raw_time):
